@@ -39,6 +39,7 @@ class Client:
         self.curl.setopt(pycurl.POST, 1)                       
         self.curl.setopt(pycurl.FOLLOWLOCATION, 1)
         self.curl.setopt(pycurl.VERBOSE, 0)
+        self.curl.setopt(pycurl.TIMEOUT, 10)
         self.buff = ""
         self.curl.setopt(pycurl.WRITEFUNCTION, self._write)
         self.curl.setopt(pycurl.HTTPPOST, params.items())
@@ -62,7 +63,7 @@ class Client:
             return ret
     ### the public api
     def get_ticker(self):
-        return self.request("code/data/ticker.php", {"dummy":""})    
+        return self.request("code/data/ticker.php", {"dummy":""})["ticker"]  
     def get_depth(self):
         return self.request("code/data/getDepth.php", {"dummy":""})
     def get_trades(self):
