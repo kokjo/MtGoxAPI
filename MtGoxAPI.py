@@ -33,13 +33,14 @@ class Client:
         self.password = password
         self.buff = ""
         self.base_url = "https://mtgox.com"
-    
+        self.timeout = 10
+        
     def perform(self, path, params):
         self.curl = pycurl.Curl()
         self.curl.setopt(pycurl.POST, 1)                       
         self.curl.setopt(pycurl.FOLLOWLOCATION, 1)
         self.curl.setopt(pycurl.VERBOSE, 0)
-        self.curl.setopt(pycurl.TIMEOUT, 10)
+        self.curl.setopt(pycurl.TIMEOUT, self.timeout)
         self.buff = ""
         self.curl.setopt(pycurl.WRITEFUNCTION, self._write)
         self.curl.setopt(pycurl.HTTPPOST, params.items())
@@ -79,9 +80,21 @@ class Client:
         return ret["orders"]
         
     def sell_btc(self, amount, price):
+        print "selling %f at price %f" % (amount, price)
         params = {"name":self.username, "pass":self.password, "amount":str(amount), "price":str(price)}
         return self.request("code/sellBTC.php", params)
     
     def buy_btc(self, amount, price):
+        print "buying %f at price %f" % (amount, price)
         params = {"name":self.username, "pass":self.password, "amount":str(amount), "price":str(price)}
         return self.request("code/buyBTC.php", params)
+        
+    def _cancel_order(self, oid, typ):
+        params = {"name":self.username, "pass":self.password, "oid":str(oid), "type":str(typ)}
+        return self.request("code/cancelOrder.php", params)    
+        
+    def cancel_order(self, oid):
+        orders = self.get_orders()
+        order = filter(lambda x: x["oid"] == oid, orders)[0]
+        return self._cancel_order(order["oid"], order["type"])
+        
