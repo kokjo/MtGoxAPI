@@ -79,15 +79,31 @@ class Client:
         ret = self.request("code/getOrders.php", params)
         return ret["orders"]
         
+    def _get_oid(self, amount, price, orders=None):
+        if not orders:
+            orders = self.get_orders()
+        order = filter(lambda x: x["amount"] == amount and x["price"] == price and x, orders)
+        #print order
+        if order:
+            return order[0]["oid"]
+        else:
+            return None
+            
     def sell_btc(self, amount, price):
-        print "selling %f at price %f" % (amount, price)
+        print "selling %s at price %s" % (str(amount), str(price))
+        if amount < 1:
+            print "minimun amount is 1btc"
+            return 0
         params = {"name":self.username, "pass":self.password, "amount":str(amount), "price":str(price)}
-        return self.request("code/sellBTC.php", params)
-    
+        return self._get_oid(amount, price, self.request("code/sellBTC.php", params)["orders"])
+        
     def buy_btc(self, amount, price):
-        print "buying %f at price %f" % (amount, price)
+        print "buying %s at price %s" % (str(amount), str(price))
+        if amount < 1:
+            print "minimun amount is 1btc"
+            return 0
         params = {"name":self.username, "pass":self.password, "amount":str(amount), "price":str(price)}
-        return self.request("code/buyBTC.php", params)
+        return self._get_oid(amount, price, self.request("code/buyBTC.php", params)["orders"])
         
     def _cancel_order(self, oid, typ):
         params = {"name":self.username, "pass":self.password, "oid":str(oid), "type":str(typ)}
