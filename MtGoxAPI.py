@@ -15,7 +15,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import pycurl
+import urllib
+import urllib2
 import json
 
 class ServerError(Exception):
@@ -50,33 +51,18 @@ class Client:
         self.timeout  = 10
 
 
-    def perform(self, path, params):
-
-        self.curl = pycurl.Curl()
-        self.curl.setopt(pycurl.POST, 1)
-        self.curl.setopt(pycurl.FOLLOWLOCATION, 1)
-        self.curl.setopt(pycurl.VERBOSE, 0)
-        self.curl.setopt(pycurl.TIMEOUT, self.timeout)
-        self.buff = ""
-        self.curl.setopt(pycurl.WRITEFUNCTION, self._write)
-        self.curl.setopt(pycurl.HTTPPOST, params.items())
+    def perform(self, path, params={}):
+        """perform the operation 'path' with params. returns the result"""
         url = "%s/%s" % (self.base_url, path)
-        self.curl.setopt(pycurl.URL, url)
-        self.curl.perform()
-        status = self.curl.getinfo(pycurl.HTTP_CODE)
-
-        if status == "OK" or status == 200:
-            return self.buff
+        if len(params) > 0:
+            post_data = urllib.urlencode(params.items())
         else:
-            raise ServerError(self.buff)
+            post_data = None
+        req = urllib2.Request(url, post_data, {"User-Agent": "MtGoxAPI"})
+        return urllib2.urlopen(url, post_data).read()
 
-
-    def _write(self, x):
-        self.buff += x
-
-
-    def request(self, path, params):
-
+    def request(self, path, params={}):
+        """perform the request and check for any errors"""
         ret = json.loads(self.perform(path, params))
 
         if "error" in ret:
@@ -88,49 +74,53 @@ class Client:
     # The Public API
 
     def get_ticker(self):
-        return self.request("code/data/ticker.php", {"dummy":""})["ticker"]
+        """get the ticker"""
+        return self.request("code/data/ticker.php")["ticker"]
 
 
     def get_depth(self):
-        return self.request("code/data/getDepth.php", {"dummy":""})
+        """get the market depth"""
+        return self.request("code/data/getDepth.php")
 
     def get_trades(self):
-        return self.request("/code/data/getTrades.php", {"dummy":""})
+        """get all 'recent' trades"""
+        return self.request("/code/data/getTrades.php")
 
 
     # The Private API
 
     def get_balance(self):
+        """get your balances. returns a dict of currency and their balances"""
         params = {"name":self.username, "pass":self.password}
         return self.request("code/getFunds.php", params)
-
+        
+    @property
+    def usd(self):
+        """your USD balance"""
+        return float(self.get_balance()["usds"])
+    
+    @property
+    def btc(self):
+        """your BTC balance"""
+        return float(self.get_balance()["btcs"])
 
     def get_orders(self):
+        """get all your orders. returns a dict of the oids and their specifications"""
         params = {"name":self.username, "pass":self.password}
         ret = self.request("code/getOrders.php", params)
-        return ret["orders"]
-
-
-    def _get_oid(self, amount, price, orders=None):
-
-        if not orders:
-            orders = self.get_orders()
-
-        order = filter(lambda x: x["amount"] == amount and x["price"] == price and x, orders)
-
-        if order:
-            return order[0]["oid"]
-        else:
-            return None
+        orders = {}
+        for i in ret["orders"]:
+            orders[i["oid"]] = i
+        return orders
 
 
     def sell_btc(self, amount, price):
-
+        """sell some btc"""
         self._notify("Issuing a sell order for %s BTC at price of %s USD" % (str(amount), str(price)))
 
-        if amount < 1:
-            self._notify("Minimun amount is 1BTC")
-            return 0
+        #if amount < 1:
+        #    self._notify("Minimun amount is 1BTC")
+        #    return 0
 
         params = {
             "name":   self.username,
@@ -139,16 +129,12 @@ class Client:
             "price":  str(price)
         }
 
-        return self._get_oid(amount, price, self.request("code/sellBTC.php", params)["orders"])
+        return self.request("code/sellBTC.php", params)["oid"]
 
 
     def buy_btc(self, amount, price):
-
+        """buy some btc"""
         self._notify("Issuing a buy order for %s BTC at a price pf %s USD" % (str(amount), str(price)))
-
-        if amount < 1:
-            self._notify("Minimun amount is 1BTC")
-            return 0
 
         params = {
             "name":   self.username, 
@@ -157,7 +143,7 @@ class Client:
             "price":  str(price)
         }
 
-        return self._get_oid(amount, price, self.request("code/buyBTC.php", params)["orders"])
+        return self.request("code/buyBTC.php", params)["oid"]
 
 
     def _cancel_order(self, oid, typ):
@@ -173,13 +159,14 @@ class Client:
 
 
     def cancel_order(self, oid):
-
+        """cancel the order 'oid'"""
         orders = self.get_orders()
-        order = filter(lambda x: x["oid"] == oid, orders)[0]
+        order = orders[oid]
 
         return self._cancel_order(order["oid"], order["type"])
 
 
     def _notify(self, message):
+        """notifys when some thing happens. may be overwritten."""
         if self.verbose:
             print message
